@@ -2,7 +2,6 @@ from http.server import BaseHTTPRequestHandler
 import json
 import os
 import urllib.request
-import urllib.parse
 
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
@@ -107,9 +106,9 @@ class handler(BaseHTTPRequestHandler):
         body = self.rfile.read(length)
 
         try:
-            if "/api/hubspot" in self.path:
+            if b"subscriptionType" in body:
                 handle_hubspot(body)
-            elif "/api/telegram" in self.path:
+            else:
                 handle_telegram(body)
         except Exception as e:
             print(f"Error: {e}")
