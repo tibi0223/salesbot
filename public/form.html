@@ -5,37 +5,51 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body { font-family: sans-serif; padding: 20px; background: #f4f4f4; }
-        input, select, textarea { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; }
-        button { width: 100%; padding: 12px; background: #0088cc; color: white; border: none; border-radius: 8px; font-weight: bold; }
+        body { font-family: sans-serif; padding: 20px; background: #f4f4f4; color: #333; }
+        input, select, textarea { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
+        label { font-weight: bold; font-size: 14px; }
+        button { width: 100%; padding: 14px; background: #0088cc; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 16px; cursor: pointer; margin-top: 10px; }
+        button:active { background: #0077b3; }
     </style>
 </head>
 <body>
-    <h3>Lead adatok</h3>
+    <h3>Lead adatok rögzítése</h3>
+    
     <label>Szolgáltatás típusa:</label>
     <select id="service">
-        <option value="Klíma telepítés">Klíma telepítés</option>
+        <option value="Telepítés">Telepítés</option>
+        <option value="Leszerelés+Telepítés">Leszerelés+Telepítés</option>
         <option value="Karbantartás">Karbantartás</option>
-        <option value="Javítás">Javítás</option>
+        <option value="Hibaelhárítás">Hibaelhárítás</option>
+        <option value="Egyéb">Egyéb</option>
     </select>
     
     <label>Megjegyzés:</label>
-    <textarea id="note" rows="4" placeholder="Ügyfél igényei..."></textarea>
+    <textarea id="note" rows="4" placeholder="Lead specifikus információk..."></textarea>
     
-    <button onclick="sendData()">Mentés</button>
+    <button onclick="sendData()">Mentés a HubSpotba</button>
 
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
+        tg.ready();
 
         function sendData() {
             const urlParams = new URLSearchParams(window.location.search);
+            const contactId = urlParams.get('id');
+
+            if (!contactId) {
+                alert("Hiba: Nincs Contact ID!");
+                return;
+            }
+
             const data = {
-                contact_id: urlParams.get('id'),
+                contact_id: contactId,
                 service: document.getElementById('service').value,
                 note: document.getElementById('note').value
             };
-            tg.sendData(JSON.stringify(data)); // Visszaküldi az adatot a botnak
+
+            tg.sendData(JSON.stringify(data)); 
             tg.close();
         }
     </script>
