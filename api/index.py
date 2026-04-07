@@ -4,12 +4,13 @@ import os
 import urllib.request
 
 # --- BEÁLLÍTÁSOK ---
+# A környezeti változókat a Vercel felületén kell beállítani
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
 HUBSPOT_ACCESS_TOKEN = os.environ.get("HUBSPOT_ACCESS_TOKEN", "").strip()
 WEB_APP_URL = "https://salesbot1.vercel.app/form.html"
 
-# Felhasználó párosítás a HubSpot 'Lead szerző' legördülőhöz
+# Felhasználó párosítás a HubSpot 'Lead szerző' mezőhöz
 USER_MAPPING = {
     "Tibor Kaplonyi": "Kaplonyi Tibor",
     "István Varró": "Varró István",
@@ -90,7 +91,7 @@ def handle_telegram(body_str):
             web_data = json.loads(data["message"]["web_app_data"]["data"])
             contact_id = web_data.get("contact_id")
             
-            # A HubSpot belső nevei (kisbetű, ékezet nélkül, szóköz helyett alulvonás)
+            # A HubSpot belső nevei a képernyőfotók alapján
             props = {
                 "szolgaltatas_tipusa": web_data.get("service"),
                 "lead_megjegyzes": web_data.get("note")
@@ -98,7 +99,7 @@ def handle_telegram(body_str):
             if update_hubspot(contact_id, props):
                 telegram_request("sendMessage", {"chat_id": user_id, "text": "✅ Az adatokat sikeresen rögzítettem a HubSpotban!"})
             else:
-                telegram_request("sendMessage", {"chat_id": user_id, "text": "❌ Hiba történt a HubSpot mentésnél."})
+                telegram_request("sendMessage", {"chat_id": user_id, "text": "❌ Hiba történt a HubSpot mentésnél. Ellenőrizd a mezőértékeket!"})
             return
 
         # 2. Gombnyomás kezelése (Kézbe veszem)
@@ -109,6 +110,7 @@ def handle_telegram(body_str):
         cb_data = callback.get("data", "")
         user = callback.get("from", {})
         user_id = user.get("id")
+        # Felhasználó teljes neve a Telegramból
         t_name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
         msg = callback.get("message", {})
 
@@ -117,12 +119,12 @@ def handle_telegram(body_str):
             
             telegram_request("answerCallbackQuery", {"callback_query_id": cb_id, "text": "Küldöm az űrlapot privátban!"})
 
-            # Lead szerző frissítése (Ez már láthatóan működik nálad)
+            # Lead szerző frissítése a mapping alapján
             hub_val = USER_MAPPING.get(t_name)
             if hub_val:
                 update_hubspot(contact_id, {"lead_szerzo": hub_val})
 
-            # CSOPORTBAN: Gomb lecserélése
+            # CSOPORTBAN: Gomb lecserélése státuszra
             new_markup = {"inline_keyboard": [[{"text": f"✅ {t_name} kezeli", "callback_data": "done"}]]}
             telegram_request("editMessageReplyMarkup", {
                 "chat_id": msg["chat"]["id"], 
@@ -130,7 +132,7 @@ def handle_telegram(body_str):
                 "reply_markup": new_markup
             })
 
-            # PRIVÁTBAN: Az űrlap kiküldése
+            # PRIVÁTBAN: Az űrlap kiküldése a Contact ID-val az URL-ben
             private_text = f"📋 <b>Adatlap kitöltése</b>\nLead ID: {contact_id}\n\nKérlek, add meg a részleteket az alábbi gombbal:"
             private_markup = {"inline_keyboard": [[
                 {"text": "📋 Űrlap megnyitása", "web_app": {"url": f"{WEB_APP_URL}?id={contact_id}"}}
@@ -147,16 +149,21 @@ def handle_telegram(body_str):
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        self.send_response(200); self.end_headers(); self.wfile.write(b"Bot is running")
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is running")
     def do_POST(self):
         content_length = int(self.headers.get('Content-Length', 0))
         body = self.rfile.read(content_length).decode('utf-8')
         
+        # Eldönti, hogy HubSpot webhook vagy Telegram üzenet érkezett-e
         if "objectId" in body or "subscriptionType" in body:
             handle_hubspot(body)
         else:
             handle_telegram(body)
             
-        self.send_response(200); self.end_headers(); self.wfile.write(b"ok")
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"ok")
 
 app = handler
