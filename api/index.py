@@ -3,15 +3,13 @@ import json
 import os
 import urllib.request
 
-# Környezeti változók tisztítása
+# --- BEÁLLÍTÁSOK ---
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
 HUBSPOT_ACCESS_TOKEN = os.environ.get("HUBSPOT_ACCESS_TOKEN", "").strip()
-
-# FIX URL a Web Apphoz (a dinamikus VERCEL_URL gyakran hibás a Telegramnak)
 WEB_APP_URL = "https://salesbot1.vercel.app/form.html"
 
-# Név párosítás
+# Felhasználó párosítás a HubSpot 'Lead szerző' legördülőhöz
 USER_MAPPING = {
     "Tibor Kaplonyi": "Kaplonyi Tibor",
     "István Varró": "Varró István",
@@ -29,6 +27,7 @@ def telegram_request(method, data):
         return None
 
 def update_hubspot(contact_id, properties):
+    """Frissíti a HubSpot kontaktot a megadott tulajdonságokkal."""
     url = f"https://api.hubapi.com/crm/v3/objects/contacts/{contact_id}"
     req = urllib.request.Request(url, data=json.dumps({"properties": properties}).encode("utf-8"), method="PATCH",
         headers={"Authorization": f"Bearer {HUBSPOT_ACCESS_TOKEN}", "Content-Type": "application/json"})
@@ -36,10 +35,11 @@ def update_hubspot(contact_id, properties):
         with urllib.request.urlopen(req, timeout=10) as r:
             return True
     except Exception as e:
-        print(f"HIBA - HubSpot módosítás: {e}")
+        print(f"HIBA - HubSpot módosítás (Contact ID: {contact_id}): {e}")
         return False
 
 def get_hubspot_contact(contact_id):
+    """Lekéri a kontakt alapadatait a Telegram értesítéshez."""
     url = f"https://api.hubapi.com/crm/v3/objects/contacts/{contact_id}?properties=firstname,lastname,email,phone"
     req = urllib.request.Request(url, headers={"Authorization": f"Bearer {HUBSPOT_ACCESS_TOKEN}"})
     try:
@@ -49,6 +49,7 @@ def get_hubspot_contact(contact_id):
         return None
 
 def handle_hubspot(body_str):
+    """HubSpot Webhook feldolgozása (új lead érkezése)."""
     try:
         data = json.loads(body_str)
         events = data if isinstance(data, list) else [data]
@@ -79,25 +80,28 @@ def handle_hubspot(body_str):
         print(f"HIBA - HubSpot bejövő feldolgozás: {e}")
 
 def handle_telegram(body_str):
+    """Telegram üzenetek és Web App válaszok feldolgozása."""
     try:
         data = json.loads(body_str)
         
-        # 1. Web App adat érkezése (Privát chatben töltötték ki)
+        # 1. Web App adat érkezése (Privát chatben kitöltött űrlap)
         if "message" in data and "web_app_data" in data["message"]:
             user_id = data["message"]["from"]["id"]
-            web_raw = data["message"]["web_app_data"]["data"]
-            web_data = json.loads(web_raw)
+            web_data = json.loads(data["message"]["web_app_data"]["data"])
             contact_id = web_data.get("contact_id")
             
+            # A HubSpot belső nevei (kisbetű, ékezet nélkül, szóköz helyett alulvonás)
             props = {
                 "szolgaltatas_tipusa": web_data.get("service"),
                 "lead_megjegyzes": web_data.get("note")
             }
             if update_hubspot(contact_id, props):
                 telegram_request("sendMessage", {"chat_id": user_id, "text": "✅ Az adatokat sikeresen rögzítettem a HubSpotban!"})
+            else:
+                telegram_request("sendMessage", {"chat_id": user_id, "text": "❌ Hiba történt a HubSpot mentésnél."})
             return
 
-        # 2. Gombnyomás kezelése
+        # 2. Gombnyomás kezelése (Kézbe veszem)
         callback = data.get("callback_query")
         if not callback: return
         
@@ -111,15 +115,14 @@ def handle_telegram(body_str):
         if cb_data.startswith("claim:"):
             contact_id = cb_data.split(":")[1]
             
-            # Azonnali válasz a gombnyomásra (pörgés megállítása)
             telegram_request("answerCallbackQuery", {"callback_query_id": cb_id, "text": "Küldöm az űrlapot privátban!"})
 
-            # HubSpot frissítése (Szerző beállítása)
+            # Lead szerző frissítése (Ez már láthatóan működik nálad)
             hub_val = USER_MAPPING.get(t_name)
             if hub_val:
                 update_hubspot(contact_id, {"lead_szerzo": hub_val})
 
-            # CSOPORTBAN: Gomb lecserélése státuszra
+            # CSOPORTBAN: Gomb lecserélése
             new_markup = {"inline_keyboard": [[{"text": f"✅ {t_name} kezeli", "callback_data": "done"}]]}
             telegram_request("editMessageReplyMarkup", {
                 "chat_id": msg["chat"]["id"], 
@@ -128,7 +131,7 @@ def handle_telegram(body_str):
             })
 
             # PRIVÁTBAN: Az űrlap kiküldése
-            private_text = f"📋 <b>Adatlap kitöltése</b>\nLead: {contact_id}\n\nKérlek, add meg a részleteket alább:"
+            private_text = f"📋 <b>Adatlap kitöltése</b>\nLead ID: {contact_id}\n\nKérlek, add meg a részleteket az alábbi gombbal:"
             private_markup = {"inline_keyboard": [[
                 {"text": "📋 Űrlap megnyitása", "web_app": {"url": f"{WEB_APP_URL}?id={contact_id}"}}
             ]]}
