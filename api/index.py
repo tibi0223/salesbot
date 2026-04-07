@@ -3,6 +3,7 @@ import json
 import os
 import urllib.request
 
+# Környezeti változók lekérése
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 HUBSPOT_ACCESS_TOKEN = os.environ.get("HUBSPOT_ACCESS_TOKEN")
@@ -13,50 +14,47 @@ def telegram_request(method, data):
     req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req) as r:
-            return json.loads(r.read())
+            res = r.read().decode('utf-8')
+            print(f"Telegram válasz: {res}")
+            return json.loads(res)
     except Exception as e:
-        print(f"Telegram hiba: {e}")
+        print(f"HIBA - Telegram küldés sikertelen: {e}")
         return None
 
 def get_hubspot_contact(contact_id):
-    # Fontos a crm/v3 API használata
     url = f"https://api.hubapi.com/crm/v3/objects/contacts/{contact_id}?properties=firstname,lastname,email,phone"
     req = urllib.request.Request(url, headers={"Authorization": f"Bearer {HUBSPOT_ACCESS_TOKEN}"})
     try:
         with urllib.request.urlopen(req) as r:
-            data = json.loads(r.read())
+            data = json.loads(r.read().decode('utf-8'))
             return data.get("properties", {})
     except Exception as e:
-        print(f"HubSpot API hiba (Contact ID: {contact_id}): {e}")
+        print(f"HIBA - HubSpot kontakt lekérés (ID: {contact_id}): {e}")
         return None
 
-def handle_hubspot(body):
+def handle_hubspot(body_str):
     try:
-        events = json.loads(body)
-        # Ha a HubSpot tesztet küld, az néha egy listát küld, néha egy objektumot
+        events = json.loads(body_str)
         if not isinstance(events, list):
             events = [events]
 
         for event in events:
-            # Ha teszt üzenet érkezik, annak nincs subscriptionType-ja, engedjük át tesztelésre
-            stype = event.get("subscriptionType", "")
-            if stype and "contact.creation" not in stype:
-                continue
-
+            #objectId keresése (teszt és éles üzenetben is benne van)
             contact_id = event.get("objectId")
             if not contact_id:
+                print("INFO: Nincs objectId az eseményben, átugrás.")
                 continue
 
             props = get_hubspot_contact(contact_id)
-            if not props:
-                # Ha nem sikerült lekérni a nevet, legalább az ID-t küldjük el
-                name, email, phone = "Ismeretlen", "–", "–"
-            else:
+            
+            if props:
                 first = props.get("firstname") or ""
                 last = props.get("lastname") or ""
                 name = f"{first} {last}".strip() or "Névtelen Lead"
                 email = props.get("email") or "–"
                 phone = props.get("phone") or "–"
+            else:
+                name, email, phone = "Ismeretlen (Hiba az API-ban)", "–", "–"
 
             hubspot_url = f"https://app.hubspot.com/contacts/contact/{contact_id}"
 
@@ -81,14 +79,13 @@ def handle_hubspot(body):
                 "reply_markup": reply_markup
             })
     except Exception as e:
-        print(f"Hiba a HubSpot feldolgozásakor: {e}")
+        print(f"HIBA - HubSpot feldolgozás: {e}")
 
-def handle_telegram(body):
+def handle_telegram(body_str):
     try:
-        data = json.loads(body)
+        data = json.loads(body_str)
         callback = data.get("callback_query")
-        if not callback:
-            return
+        if not callback: return
 
         callback_data = callback.get("data", "")
         user = callback.get("from", {})
@@ -97,28 +94,20 @@ def handle_telegram(body):
         message_id = message.get("message_id")
         chat_id = message.get("chat", {}).get("id")
 
-        if not callback_data.startswith("claim:"):
-            return
-
-        # Csak a gombot módosítjuk, hogy ne vesszen el a formázás
-        new_reply_markup = {
-            "inline_keyboard": [[
-                {"text": f"✅ {username} kezeli", "callback_data": "done"}
-            ]]
-        }
-
-        telegram_request("editMessageReplyMarkup", {
-            "chat_id": chat_id,
-            "message_id": message_id,
-            "reply_markup": new_reply_markup
-        })
-
-        telegram_request("answerCallbackQuery", {
-            "callback_query_id": callback.get("id"),
-            "text": "✅ Sikeresen hozzárendelve!"
-        })
+        if callback_data.startswith("claim:"):
+            new_reply_markup = {
+                "inline_keyboard": [[
+                    {"text": f"✅ {username} kezeli", "callback_data": "done"}
+                ]]
+            }
+            telegram_request("editMessageReplyMarkup", {
+                "chat_id": chat_id,
+                "message_id": message_id,
+                "reply_markup": new_reply_markup
+            })
+            telegram_request("answerCallbackQuery", {"callback_query_id": callback.get("id"), "text": "✅ OK!"})
     except Exception as e:
-        print(f"Hiba a Telegram gomb feldolgozásakor: {e}")
+        print(f"HIBA - Telegram callback: {e}")
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -127,22 +116,28 @@ class handler(BaseHTTPRequestHandler):
         self.wfile.write(b"Lead Bot is running!")
 
     def do_POST(self):
-        length = int(self.headers.get("Content-Length", 0))
-        body = self.rfile.read(length)
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(content_length).decode('utf-8')
         
-        # Logoljuk a beérkező adatot a Vercel-be hibakereséshez
-        print(f"Beérkező kérés: {body.decode('utf-8')}")
+        print(f"DEBUG - Beérkező nyers adat: {body}")
 
-        if b"objectId" in body or b"subscriptionType" in body:
-            handle_hubspot(body)
-        elif b"callback_query" in body:
-            handle_telegram(body)
+        try:
+            # Ha van benne objectId, akkor HubSpot küldte
+            if "objectId" in body:
+                handle_hubspot(body)
+            # Ha callback_query, akkor Telegram gombnyomás
+            elif "callback_query" in body:
+                handle_telegram(body)
+            else:
+                print("INFO: Ismeretlen típusú POST kérés.")
+        except Exception as e:
+            print(f"HIBA - do_POST hiba: {e}")
 
         self.send_response(200)
         self.end_headers()
         self.wfile.write(b"ok")
 
     def log_message(self, format, *args):
-        pass
+        return
 
 app = handler
