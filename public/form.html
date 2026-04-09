@@ -27,16 +27,17 @@
     <label>Megjegyzés:</label>
     <textarea id="note" rows="4" placeholder="Lead specifikus információk..."></textarea>
     
-    <button onclick="sendData()">Mentés a HubSpotba</button>
+    <button id="saveBtn" onclick="sendData()">Mentés a HubSpotba</button>
 
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
         tg.ready();
 
-        function sendData() {
+        async function sendData() {
             const urlParams = new URLSearchParams(window.location.search);
             const contactId = urlParams.get('id');
+            const saveBtn = document.getElementById('saveBtn');
 
             if (!contactId) {
                 alert("Hiba: Nincs Contact ID!");
@@ -44,13 +45,36 @@
             }
 
             const data = {
+                source: "webapp",
                 contact_id: contactId,
                 service: document.getElementById('service').value,
-                note: document.getElementById('note').value
+                note: document.getElementById('note').value,
+                user_id: tg.initDataUnsafe?.user?.id
             };
 
-            tg.sendData(JSON.stringify(data)); 
-            tg.close();
+            saveBtn.disabled = true;
+            saveBtn.innerText = "Küldés folyamatban...";
+
+            try {
+                // Elküldjük az adatokat közvetlenül a backendnek
+                const response = await fetch('/api/index', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                if (response.ok) {
+                    tg.close();
+                } else {
+                    alert("Hiba történt a mentés során.");
+                    saveBtn.disabled = false;
+                    saveBtn.innerText = "Mentés a HubSpotba";
+                }
+            } catch (error) {
+                alert("Hálózati hiba történt.");
+                saveBtn.disabled = false;
+                saveBtn.innerText = "Mentés a HubSpotba";
+            }
         }
     </script>
 </body>
