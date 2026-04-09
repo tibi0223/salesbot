@@ -117,6 +117,20 @@ def handle_telegram(body_str):
         if cb_data.startswith("claim:"):
             contact_id = cb_data.split(":")[1]
             
+            # Ellenőrizzük az aktuális üzenet gombját
+            current_reply_markup = msg.get("reply_markup", {})
+            inline_keyboard = current_reply_markup.get("inline_keyboard", [[]])
+            button_text = inline_keyboard[0][0].get("text", "") if inline_keyboard and inline_keyboard[0] else ""
+            
+            # Ha már valaki kezelte (a gomb szövege tartalmazza a pipát), akkor ne engedjük újra
+            if "✅" in button_text:
+                telegram_request("answerCallbackQuery", {
+                    "callback_query_id": cb_id, 
+                    "text": "Ezt a leadet már valaki elvitte!",
+                    "show_alert": True
+                })
+                return
+
             telegram_request("answerCallbackQuery", {"callback_query_id": cb_id, "text": "Küldöm az űrlapot privátban!"})
 
             # Lead szerző frissítése a mapping alapján
@@ -124,7 +138,7 @@ def handle_telegram(body_str):
             if hub_val:
                 update_hubspot(contact_id, {"lead_szerzo": hub_val})
 
-            # CSOPORTBAN: Gomb lecserélése státuszra
+            # CSOPORTBAN: Gomb lecserélése státuszra (azonnali visszajelzés a csoportnak)
             new_markup = {"inline_keyboard": [[{"text": f"✅ {t_name} kezeli", "callback_data": "done"}]]}
             telegram_request("editMessageReplyMarkup", {
                 "chat_id": msg["chat"]["id"], 
@@ -147,6 +161,26 @@ def handle_telegram(body_str):
     except Exception as e:
         print(f"HIBA - Telegram feldolgozás: {e}")
 
+def handle_webapp_submission(data):
+    """A Web App űrlap közvetlen beküldésének feldolgozása."""
+    try:
+        contact_id = data.get("contact_id")
+        user_id = data.get("user_id")
+        
+        props = {
+            "szolgaltatas_tipusa": data.get("service"),
+            "lead_megjegyzes": data.get("note")
+        }
+        
+        if update_hubspot(contact_id, props):
+            if user_id:
+                telegram_request("sendMessage", {"chat_id": user_id, "text": "✅ Az adatokat sikeresen rögzítettem a HubSpotban!"})
+        else:
+            if user_id:
+                telegram_request("sendMessage", {"chat_id": user_id, "text": "❌ Hiba történt a HubSpot mentésnél. Ellenőrizd a mezőértékeket!"})
+    except Exception as e:
+        print(f"HIBA - Web App submission feldolgozás: {e}")
+
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -154,13 +188,20 @@ class handler(BaseHTTPRequestHandler):
         self.wfile.write(b"Bot is running")
     def do_POST(self):
         content_length = int(self.headers.get('Content-Length', 0))
-        body = self.rfile.read(content_length).decode('utf-8')
+        body_str = self.rfile.read(content_length).decode('utf-8')
         
-        # Eldönti, hogy HubSpot webhook vagy Telegram üzenet érkezett-e
-        if "objectId" in body or "subscriptionType" in body:
-            handle_hubspot(body)
+        try:
+            data = json.loads(body_str)
+        except:
+            data = {}
+
+        # Eldönti, hogy HubSpot webhook, Web App submission vagy Telegram üzenet érkezett-e
+        if isinstance(data, list) or "objectId" in data or "subscriptionType" in data:
+            handle_hubspot(body_str)
+        elif data.get("source") == "webapp":
+            handle_webapp_submission(data)
         else:
-            handle_telegram(body)
+            handle_telegram(body_str)
             
         self.send_response(200)
         self.end_headers()
