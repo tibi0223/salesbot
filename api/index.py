@@ -169,6 +169,9 @@ def handle_webapp_submission(data):
         
         props = {
             "szolgaltatas_tipusa": data.get("service"),
+            "telepules": data.get("telepules"),
+            "irsz": data.get("irsz"),
+            "cim": data.get("cim"),
             "lead_megjegyzes": data.get("note")
         }
         
