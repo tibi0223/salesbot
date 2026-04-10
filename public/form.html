@@ -23,6 +23,15 @@
         <option value="Hibaelhárítás">Hibaelhárítás</option>
         <option value="Egyéb">Egyéb</option>
     </select>
+
+    <label>Település:</label>
+    <input type="text" id="telepules" placeholder="Budapest">
+
+    <label>IRSZ:</label>
+    <input type="text" id="irsz" placeholder="1234">
+
+    <label>Cím:</label>
+    <input type="text" id="cim" placeholder="Utca, házszám">
     
     <label>Megjegyzés:</label>
     <textarea id="note" rows="4" placeholder="Lead specifikus információk..."></textarea>
@@ -48,6 +57,9 @@
                 source: "webapp",
                 contact_id: contactId,
                 service: document.getElementById('service').value,
+                telepules: document.getElementById('telepules').value,
+                irsz: document.getElementById('irsz').value,
+                cim: document.getElementById('cim').value,
                 note: document.getElementById('note').value,
                 user_id: tg.initDataUnsafe?.user?.id
             };
