@@ -146,8 +146,20 @@ def handle_telegram(body_str):
                 "reply_markup": new_markup
             })
 
-            # PRIVÁTBAN: Az űrlap kiküldése a Contact ID-val az URL-ben
-            private_text = f"📋 <b>Adatlap kitöltése</b>\nLead ID: {contact_id}\n\nKérlek, add meg a részleteket az alábbi gombbal:"
+            # Lekérjük az ügyfél adatait a privát üzenethez
+            props = get_hubspot_contact(contact_id) or {}
+            c_name = f"{props.get('firstname','')} {props.get('lastname','')}".strip() or "Névtelen Lead"
+            c_email = props.get('email', '–')
+            c_phone = props.get('phone', '–')
+
+            # PRIVÁTBAN: Az űrlap kiküldése az adatokkal
+            private_text = (
+                f"📋 <b>Adatlap kitöltése</b>\n\n"
+                f"👤 <b>Név:</b> {c_name}\n"
+                f"📧 <b>Email:</b> {c_email}\n"
+                f"📞 <b>Telefon:</b> {c_phone}\n\n"
+                f"Kérlek, add meg a részleteket az alábbi gombbal:"
+            )
             private_markup = {"inline_keyboard": [[
                 {"text": "📋 Űrlap megnyitása", "web_app": {"url": f"{WEB_APP_URL}?id={contact_id}"}}
             ]]}
