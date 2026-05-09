@@ -84,7 +84,7 @@ def create_hubspot_deal(contact_id, deal_name):
         "associations": [
             {
                 "to": {"id": contact_id},
-                "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 15}] # Contact to Deal
+                "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 3}] # Deal to Contact
             }
         ]
     }
