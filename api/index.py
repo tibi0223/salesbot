@@ -322,12 +322,27 @@ def handle_telegram(body_str):
             private_markup = {"inline_keyboard": [[
                 {"text": "📋 Űrlap megnyitása", "web_app": {"url": f"{WEB_APP_URL}?id={contact_id}"}}
             ]]}
-            telegram_request("sendMessage", {
+            res = telegram_request("sendMessage", {
                 "chat_id": user_id,
                 "text": private_text,
                 "parse_mode": "HTML",
                 "reply_markup": private_markup
             })
+            
+            if not res:
+                # Ha nem sikerült elküldeni a privát üzenetet (pl. blokkolva van a bot)
+                telegram_request("sendMessage", {
+                    "chat_id": msg["chat"]["id"],
+                    "text": f"⚠️ <b>{t_name}</b>, nem tudtam elküldeni neked a privát űrlapot (valószínűleg blokkoltad a botot). Kérlek, keress rá a botra és nyomj egy /start -ot!",
+                    "parse_mode": "HTML"
+                })
+                # Visszaállítjuk a gombot, hogy más is elvihesse
+                reset_markup = {"inline_keyboard": [[{"text": "✋ Kézbe veszem", "callback_data": f"claim:{contact_id}"}]]}
+                telegram_request("editMessageReplyMarkup", {
+                    "chat_id": msg["chat"]["id"], 
+                    "message_id": msg["message_id"], 
+                    "reply_markup": reset_markup
+                })
 
     except Exception as e:
         print(f"HIBA - Telegram feldolgozás: {e}")
