@@ -132,13 +132,33 @@ def update_deal(deal_id, properties):
 
 def get_hubspot_contact(contact_id):
     """Lekéri a kontakt alapadatait a Telegram értesítéshez."""
-    url = f"https://api.hubapi.com/crm/v3/objects/contacts/{contact_id}?properties=firstname,lastname,email,phone"
+    url = f"https://api.hubapi.com/crm/v3/objects/contacts/{contact_id}?properties=firstname,lastname,email,phone,szolgaltatas_tipusa"
     req = urllib.request.Request(url, headers={"Authorization": f"Bearer {HUBSPOT_ACCESS_TOKEN}"})
     try:
         with urllib.request.urlopen(req) as r:
             return json.loads(r.read().decode('utf-8')).get("properties", {})
     except:
         return None
+
+def create_hubspot_note(contact_id, text):
+    """Létrehoz egy beépített Jegyzetet (Note) a kontakthoz."""
+    if not contact_id or not text: return False
+    url = "https://api.hubapi.com/crm/v3/objects/notes"
+    payload = {
+        "properties": {"hs_note_body": text},
+        "associations": [{
+            "to": {"id": str(contact_id)},
+            "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 202}] # Note to Contact
+        }]
+    }
+    req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), method="POST",
+        headers={"Authorization": f"Bearer {HUBSPOT_ACCESS_TOKEN}", "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return True
+    except Exception as e:
+        print(f"HIBA - Note letrehozas: {e}")
+        return False
 
 def handle_hubspot(body_str):
     """HubSpot Webhook feldolgozása (új lead érkezése)."""
@@ -191,7 +211,7 @@ def handle_google_sheet(data):
             "lastname": data.get("Vezetéknév", ""),
             "email": email,
             "phone": phone,
-            "lead_megjegyzes": f"Szolgáltatás: {data.get('Szolgáltatás', '')} | Üzenet: {data.get('Üzenet', '')}"
+            "szolgaltatas_tipusa": data.get("Szolgáltatás", "")
         }
         # Kiszedjük az üres mezőket, hogy a HubSpot ne dobjon hibát
         hs_props = {k: v for k, v in hs_props.items() if v}
@@ -206,6 +226,10 @@ def handle_google_sheet(data):
         if contact_id:
             # Létrehozzuk a Dealt (Érdeklődő szakaszba kerül alapból) a régi vagy új kontakthoz
             create_hubspot_deal(contact_id, name)
+            # Hozzáadjuk a megjegyzést külön Note-ként
+            sheet_note = data.get("Üzenet", "").strip()
+            if sheet_note:
+                create_hubspot_note(contact_id, f"Üzenet az űrlapról:\n{sheet_note}")
         else:
             print("Nem sikerült létrehozni/megtalálni a kontaktot a HubSpotban, de a Telegram üzenet kimegy!")
 
@@ -366,12 +390,23 @@ def handle_webapp_submission(data):
         contact_id = data.get("contact_id")
         user_id = data.get("user_id")
         
+        # Lekérjük az eddigi szolgáltatásokat, hogy hozzáfűzzünk
+        existing = get_hubspot_contact(contact_id) or {}
+        old_szolg = existing.get("szolgaltatas_tipusa", "")
+        new_szolg = data.get("szolgaltatas_tipusa", "")
+        
+        merged_szolg = old_szolg
+        if new_szolg and new_szolg not in old_szolg:
+            if merged_szolg:
+                merged_szolg += f";{new_szolg}"
+            else:
+                merged_szolg = new_szolg
+        
         props = {
             "epulet_tipusa": data.get("epulet_tipusa"),
-            "szolgaltatas_tipusa": data.get("szolgaltatas_tipusa"),
+            "szolgaltatas_tipusa": merged_szolg,
             "zip": data.get("post_code"),
             "address": data.get("street_address"),
-            "lead_megjegyzes": data.get("note"),
             "felmeres_idopontja": data.get("felmeres_idopontja")
         }
 
@@ -379,6 +414,11 @@ def handle_webapp_submission(data):
         props = {k: v for k, v in props.items() if v}
         
         update_result = update_hubspot(contact_id, props)
+        
+        # Ha a kolléga is írt megjegyzést az űrlapon, azt külön Note-ként rögzítjük
+        new_note = data.get("note", "").strip()
+        if new_note:
+            create_hubspot_note(contact_id, f"Kolléga megjegyzése (Salesbot):\n{new_note}")
         if update_result is True:
             if user_id:
                 telegram_request("sendMessage", {"chat_id": user_id, "text": "✅ Az adatokat sikeresen rögzítettem a HubSpotban!"})
