@@ -236,8 +236,8 @@ def handle_telegram(body_str):
             props = {
                 "epulet_tipusa": web_data.get("epulet_tipusa"),
                 "szolgaltatas_tipusa": web_data.get("szolgaltatas_tipusa"),
-                "post_code": web_data.get("post_code"),
-                "street_address": web_data.get("street_address"),
+                "zip": web_data.get("post_code"),
+                "address": web_data.get("street_address"),
                 "lead_megjegyzes": web_data.get("note")
             }
             if update_hubspot(contact_id, props):
@@ -326,8 +326,8 @@ def handle_webapp_submission(data):
         props = {
             "epulet_tipusa": data.get("epulet_tipusa"),
             "szolgaltatas_tipusa": data.get("szolgaltatas_tipusa"),
-            "post_code": data.get("post_code"),
-            "street_address": data.get("street_address"),
+            "zip": data.get("post_code"),
+            "address": data.get("street_address"),
             "lead_megjegyzes": data.get("note")
         }
         
