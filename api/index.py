@@ -1,7 +1,7 @@
-from http.server import BaseHTTPRequestHandler
 import json
 import os
 import urllib.request
+import urllib.error
 
 # --- BEÁLLÍTÁSOK ---
 # A környezeti változókat a Vercel felületén kell beállítani
@@ -38,7 +38,6 @@ def update_hubspot(contact_id, properties):
         with urllib.request.urlopen(req, timeout=10) as r:
             return True
     except Exception as e:
-        import urllib.error
         if isinstance(e, urllib.error.HTTPError):
             try:
                 error_body = e.read().decode('utf-8')
@@ -297,13 +296,17 @@ def handle_telegram(body_str):
             if hub_val:
                 update_hubspot(contact_id, {"lead_szerzo": hub_val})
 
-            # CSOPORTBAN: Gomb lecserélése státuszra (azonnali visszajelzés a csoportnak)
-            new_markup = {"inline_keyboard": [[{"text": f"✅ {t_name} kezeli", "callback_data": "done"}]]}
-            telegram_request("editMessageReplyMarkup", {
-                "chat_id": msg["chat"]["id"], 
-                "message_id": msg["message_id"], 
-                "reply_markup": new_markup
-            })
+            chat_id = msg.get("chat", {}).get("id")
+            message_id = msg.get("message_id")
+            
+            if chat_id and message_id:
+                # CSOPORTBAN: Gomb lecserélése státuszra (azonnali visszajelzés a csoportnak)
+                new_markup = {"inline_keyboard": [[{"text": f"✅ {t_name} kezeli", "callback_data": "done"}]]}
+                telegram_request("editMessageReplyMarkup", {
+                    "chat_id": chat_id, 
+                    "message_id": message_id, 
+                    "reply_markup": new_markup
+                })
 
             # Lekérjük az ügyfél adatait a privát üzenethez
             props = get_hubspot_contact(contact_id) or {}
@@ -329,23 +332,33 @@ def handle_telegram(body_str):
                 "reply_markup": private_markup
             })
             
-            if not res:
+            if not res and chat_id and message_id:
                 # Ha nem sikerült elküldeni a privát üzenetet (pl. blokkolva van a bot)
                 telegram_request("sendMessage", {
-                    "chat_id": msg["chat"]["id"],
+                    "chat_id": chat_id,
                     "text": f"⚠️ <b>{t_name}</b>, nem tudtam elküldeni neked a privát űrlapot (valószínűleg blokkoltad a botot). Kérlek, keress rá a botra és nyomj egy /start -ot!",
                     "parse_mode": "HTML"
                 })
                 # Visszaállítjuk a gombot, hogy más is elvihesse
                 reset_markup = {"inline_keyboard": [[{"text": "✋ Kézbe veszem", "callback_data": f"claim:{contact_id}"}]]}
                 telegram_request("editMessageReplyMarkup", {
-                    "chat_id": msg["chat"]["id"], 
-                    "message_id": msg["message_id"], 
+                    "chat_id": chat_id, 
+                    "message_id": message_id, 
                     "reply_markup": reset_markup
                 })
 
     except Exception as e:
-        print(f"HIBA - Telegram feldolgozás: {e}")
+        import traceback
+        err_msg = traceback.format_exc()
+        print(f"HIBA - Telegram feldolgozás:\n{err_msg}")
+        try:
+            telegram_request("sendMessage", {
+                "chat_id": TELEGRAM_CHAT_ID,
+                "text": f"Kritikus hiba a Telegram feldolgozásakor:\n<pre>{str(e)}</pre>",
+                "parse_mode": "HTML"
+            })
+        except:
+            pass
 
 def handle_webapp_submission(data):
     """A Web App űrlap közvetlen beküldésének feldolgozása."""
@@ -387,6 +400,8 @@ def handle_webapp_submission(data):
                 })
     except Exception as e:
         print(f"HIBA - Web App submission feldolgozás: {e}")
+
+from http.server import BaseHTTPRequestHandler
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
