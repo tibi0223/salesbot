@@ -394,22 +394,23 @@ def handle_webapp_submission(data):
             update_hubspot(contact_id, contact_props)
         
         # --- PROJEKT adatok a Deal-re mennek ---
-        deals = get_associated_deals(contact_id)
-        if not deals:
-            if user_id:
-                telegram_request("sendMessage", {"chat_id": user_id, "text": "⚠️ Nincs Deal ehhez a kontakthoz! Kérlek, először küldd be a leadet."})
-            return
-        
-        deal_id = deals[0]  # Legfrissebb deal
-        
         deal_props = {}
         if data.get("epulet_tipusa"): deal_props["epulet_tipusa"] = data["epulet_tipusa"]
         if data.get("szolgaltatas_tipusa"): deal_props["szolgaltatas_tipusa"] = data["szolgaltatas_tipusa"]
         if data.get("felmeres_idopontja"): deal_props["felmeres_idopontja"] = data["felmeres_idopontja"]
         
-        update_result = True
-        if deal_props:
-            update_result = update_deal(deal_id, deal_props)
+        deals = get_associated_deals(contact_id)
+        if deals:
+            deal_id = deals[0]  # Legfrissebb deal frissítése
+            update_result = True
+            if deal_props:
+                update_result = update_deal(deal_id, deal_props)
+        else:
+            # Ha nincs Deal, létrehozunk egyet az űrlap adataival
+            contact_data = get_hubspot_contact(contact_id) or {}
+            c_name = f"{contact_data.get('firstname','')} {contact_data.get('lastname','')}".strip() or "Névtelen"
+            deal_id = create_hubspot_deal(contact_id, c_name, deal_props)
+            update_result = deal_id is not None
         
         # Megjegyzés Note-ként (Contact-hoz ÉS Deal-hez csatolva, címmel együtt)
         note_parts = []
