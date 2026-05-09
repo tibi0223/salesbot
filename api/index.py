@@ -81,30 +81,38 @@ def search_hubspot_contact_by_email(email):
         print(f"HIBA - Kontakt keresés: {e}")
     return None
 
-def create_hubspot_deal(contact_id, deal_name):
-    """Létrehoz egy új Deal-t a HubSpotban és összeköti a kontakttal."""
-    if not contact_id: return False
+def create_hubspot_deal(contact_id, deal_name, deal_properties=None):
+    """Létrehoz egy új Deal-t a HubSpotban és összeköti a kontakttal. Visszaadja a Deal ID-t."""
+    if not contact_id: return None
     url = "https://api.hubapi.com/crm/v3/objects/deals"
+    props = {"dealname": f"{deal_name} - Új Érdeklődő", "dealstage": DEALSTAGE_ERDEKLODO}
+    if deal_properties:
+        props.update({k: v for k, v in deal_properties.items() if v})
     payload = {
-        "properties": {
-            "dealname": f"{deal_name} - Új Érdeklődő",
-            "dealstage": DEALSTAGE_ERDEKLODO
-        },
-        "associations": [
-            {
-                "to": {"id": str(contact_id)},
-                "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 3}] # Deal to Contact
-            }
-        ]
+        "properties": props,
+        "associations": [{
+            "to": {"id": str(contact_id)},
+            "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 3}]
+        }]
     }
     req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), method="POST",
         headers={"Authorization": f"Bearer {HUBSPOT_ACCESS_TOKEN}", "Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=10) as r:
-            return True
+            return json.loads(r.read().decode('utf-8')).get("id")
     except Exception as e:
         print(f"HIBA - Deal letrehozas: {e}")
-        return False
+        return None
+
+def get_hubspot_deal(deal_id):
+    """Lekéri egy Deal adatait."""
+    url = f"https://api.hubapi.com/crm/v3/objects/deals/{deal_id}?properties=szolgaltatas_tipusa,epulet_tipusa,felmeres_idopontja"
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {HUBSPOT_ACCESS_TOKEN}"})
+    try:
+        with urllib.request.urlopen(req) as r:
+            return json.loads(r.read().decode('utf-8')).get("properties", {})
+    except:
+        return None
 
 def get_associated_deals(contact_id):
     """Lekéri egy kontakthoz tartozó Deal-ek ID-ját."""
@@ -132,7 +140,7 @@ def update_deal(deal_id, properties):
 
 def get_hubspot_contact(contact_id):
     """Lekéri a kontakt alapadatait a Telegram értesítéshez."""
-    url = f"https://api.hubapi.com/crm/v3/objects/contacts/{contact_id}?properties=firstname,lastname,email,phone,szolgaltatas_tipusa"
+    url = f"https://api.hubapi.com/crm/v3/objects/contacts/{contact_id}?properties=firstname,lastname,email,phone"
     req = urllib.request.Request(url, headers={"Authorization": f"Bearer {HUBSPOT_ACCESS_TOKEN}"})
     try:
         with urllib.request.urlopen(req) as r:
@@ -140,17 +148,16 @@ def get_hubspot_contact(contact_id):
     except:
         return None
 
-def create_hubspot_note(contact_id, text):
-    """Létrehoz egy beépített Jegyzetet (Note) a kontakthoz."""
-    if not contact_id or not text: return False
+def create_hubspot_note(contact_id, text, deal_id=None):
+    """Létrehoz egy beépített Jegyzetet (Note) a kontakthoz és opcionálisan a dealhez."""
+    if not text: return False
     url = "https://api.hubapi.com/crm/v3/objects/notes"
-    payload = {
-        "properties": {"hs_note_body": text},
-        "associations": [{
-            "to": {"id": str(contact_id)},
-            "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 202}] # Note to Contact
-        }]
-    }
+    associations = []
+    if contact_id:
+        associations.append({"to": {"id": str(contact_id)}, "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 202}]})
+    if deal_id:
+        associations.append({"to": {"id": str(deal_id)}, "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 214}]})
+    payload = {"properties": {"hs_note_body": text}, "associations": associations}
     req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), method="POST",
         headers={"Authorization": f"Bearer {HUBSPOT_ACCESS_TOKEN}", "Content-Type": "application/json"})
     try:
@@ -205,13 +212,12 @@ def handle_google_sheet(data):
             "parse_mode": "HTML"
         })
         
-        # 1. Kontakt létrehozása HubSpotban (csak biztonságos alapmezők)
+        # 1. Kontakt létrehozása HubSpotban (csak személyes alapmezők)
         hs_props = {
             "firstname": data.get("Keresztnév", ""),
             "lastname": data.get("Vezetéknév", ""),
             "email": email,
-            "phone": phone,
-            "szolgaltatas_tipusa": data.get("Szolgáltatás", "")
+            "phone": phone
         }
         # Kiszedjük az üres mezőket, hogy a HubSpot ne dobjon hibát
         hs_props = {k: v for k, v in hs_props.items() if v}
@@ -221,15 +227,16 @@ def handle_google_sheet(data):
         # Ha nem sikerült létrehozni (pl. mert már létezik), megpróbáljuk megkeresni email alapján
         if not contact_id and email:
             contact_id = search_hubspot_contact_by_email(email)
-            # Direkt KIVETTÜK az update_hubspot hívást a gyorsítás és stabilitás miatt!
 
+        deal_id = None
         if contact_id:
-            # Létrehozzuk a Dealt (Érdeklődő szakaszba kerül alapból) a régi vagy új kontakthoz
-            create_hubspot_deal(contact_id, name)
-            # Hozzáadjuk a megjegyzést külön Note-ként
+            # Deal létrehozása a szolgáltatással
+            deal_props = {"szolgaltatas_tipusa": data.get("Szolgáltatás", "")}
+            deal_id = create_hubspot_deal(contact_id, name, deal_props)
+            # Hozzáadjuk a megjegyzést külön Note-ként (Contact-hoz és Deal-hez is)
             sheet_note = data.get("Üzenet", "").strip()
             if sheet_note:
-                create_hubspot_note(contact_id, f"Üzenet az űrlapról:\n{sheet_note}")
+                create_hubspot_note(contact_id, f"Üzenet az űrlapról:\n{sheet_note}", deal_id)
         else:
             print("Nem sikerült létrehozni/megtalálni a kontaktot a HubSpotban, de a Telegram üzenet kimegy!")
 
@@ -268,20 +275,9 @@ def handle_telegram(body_str):
         if "message" in data and "web_app_data" in data["message"]:
             user_id = data["message"]["from"]["id"]
             web_data = json.loads(data["message"]["web_app_data"]["data"])
-            contact_id = web_data.get("contact_id")
-            
-            # A HubSpot belső nevei
-            props = {
-                "epulet_tipusa": web_data.get("epulet_tipusa"),
-                "szolgaltatas_tipusa": web_data.get("szolgaltatas_tipusa"),
-                "zip": web_data.get("post_code"),
-                "address": web_data.get("street_address"),
-                "lead_megjegyzes": web_data.get("note")
-            }
-            if update_hubspot(contact_id, props):
-                telegram_request("sendMessage", {"chat_id": user_id, "text": "✅ Az adatokat sikeresen rögzítettem a HubSpotban!"})
-            else:
-                telegram_request("sendMessage", {"chat_id": user_id, "text": "❌ Hiba történt a HubSpot mentésnél. Ellenőrizd a mezőértékeket!"})
+            web_data["source"] = "webapp"
+            web_data["user_id"] = user_id
+            handle_webapp_submission(web_data)
             return
 
         # 2. Gombnyomás kezelése (Kézbe veszem)
@@ -390,54 +386,50 @@ def handle_webapp_submission(data):
         contact_id = data.get("contact_id")
         user_id = data.get("user_id")
         
-        # Lekérjük az eddigi szolgáltatásokat, hogy hozzáfűzzünk
-        existing = get_hubspot_contact(contact_id) or {}
-        old_szolg = existing.get("szolgaltatas_tipusa", "")
-        new_szolg = data.get("szolgaltatas_tipusa", "")
+        # --- CÍM a Contact-ra megy ---
+        contact_props = {}
+        if data.get("post_code"): contact_props["zip"] = data["post_code"]
+        if data.get("street_address"): contact_props["address"] = data["street_address"]
+        if contact_props:
+            update_hubspot(contact_id, contact_props)
         
-        merged_szolg = old_szolg
-        if new_szolg and new_szolg not in old_szolg:
-            if merged_szolg:
-                merged_szolg += f";{new_szolg}"
-            else:
-                merged_szolg = new_szolg
+        # --- PROJEKT adatok a Deal-re mennek ---
+        deals = get_associated_deals(contact_id)
+        if not deals:
+            if user_id:
+                telegram_request("sendMessage", {"chat_id": user_id, "text": "⚠️ Nincs Deal ehhez a kontakthoz! Kérlek, először küldd be a leadet."})
+            return
         
-        props = {
-            "epulet_tipusa": data.get("epulet_tipusa"),
-            "szolgaltatas_tipusa": merged_szolg,
-            "zip": data.get("post_code"),
-            "address": data.get("street_address"),
-            "felmeres_idopontja": data.get("felmeres_idopontja")
-        }
-
-        # Csak a kitöltött mezőket küldjük
-        props = {k: v for k, v in props.items() if v}
+        deal_id = deals[0]  # Legfrissebb deal
         
-        update_result = update_hubspot(contact_id, props)
+        deal_props = {}
+        if data.get("epulet_tipusa"): deal_props["epulet_tipusa"] = data["epulet_tipusa"]
+        if data.get("szolgaltatas_tipusa"): deal_props["szolgaltatas_tipusa"] = data["szolgaltatas_tipusa"]
+        if data.get("felmeres_idopontja"): deal_props["felmeres_idopontja"] = data["felmeres_idopontja"]
         
-        # Ha a kolléga is írt megjegyzést az űrlapon, azt külön Note-ként rögzítjük
-        new_note = data.get("note", "").strip()
-        if new_note:
-            create_hubspot_note(contact_id, f"Kolléga megjegyzése (Salesbot):\n{new_note}")
-        if update_result is True:
+        update_result = True
+        if deal_props:
+            update_result = update_deal(deal_id, deal_props)
+        
+        # Megjegyzés Note-ként (Contact-hoz ÉS Deal-hez csatolva, címmel együtt)
+        note_parts = []
+        if data.get("post_code") or data.get("street_address"):
+            note_parts.append(f"Cím: {data.get('post_code', '')} {data.get('street_address', '')}")
+        if data.get("note", "").strip():
+            note_parts.append(f"Megjegyzés: {data['note'].strip()}")
+        if note_parts:
+            create_hubspot_note(contact_id, "Salesbot űrlap:\n" + "\n".join(note_parts), deal_id)
+        
+        # Deal stage frissítés felmérés időpontja esetén
+        if data.get("felmeres_idopontja") and DEALSTAGE_FELMERES:
+            update_deal(deal_id, {"dealstage": DEALSTAGE_FELMERES})
+        
+        if update_result:
             if user_id:
                 telegram_request("sendMessage", {"chat_id": user_id, "text": "✅ Az adatokat sikeresen rögzítettem a HubSpotban!"})
-                
-            # Ha van felmérés időpontja, frissítjük a hozzá tartozó Deal állapotát is
-            if props.get("felmeres_idopontja") and DEALSTAGE_FELMERES:
-                deals = get_associated_deals(contact_id)
-                for deal_id in deals:
-                    update_deal(deal_id, {"dealstage": DEALSTAGE_FELMERES})
-                    
         else:
             if user_id:
-                import html
-                safe_error = html.escape(str(update_result))
-                telegram_request("sendMessage", {
-                    "chat_id": user_id, 
-                    "text": f"❌ <b>Hiba történt a HubSpot mentésnél!</b>\n\n<b>Részletek:</b>\n<code>{safe_error}</code>", 
-                    "parse_mode": "HTML"
-                })
+                telegram_request("sendMessage", {"chat_id": user_id, "text": "❌ Hiba történt a HubSpot mentésnél."})
     except Exception as e:
         print(f"HIBA - Web App submission feldolgozás: {e}")
 
