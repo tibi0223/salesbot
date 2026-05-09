@@ -38,8 +38,17 @@ def update_hubspot(contact_id, properties):
         with urllib.request.urlopen(req, timeout=10) as r:
             return True
     except Exception as e:
-        print(f"HIBA - HubSpot módosítás (Contact ID: {contact_id}): {e}")
-        return False
+        import urllib.error
+        if isinstance(e, urllib.error.HTTPError):
+            try:
+                error_body = e.read().decode('utf-8')
+            except:
+                error_body = str(e)
+            print(f"HIBA - HubSpot módosítás (Contact ID: {contact_id}): {error_body}")
+            return error_body
+        else:
+            print(f"HIBA - HubSpot módosítás (Contact ID: {contact_id}): {e}")
+            return str(e)
 
 def create_hubspot_contact(properties):
     """Létrehoz egy új HubSpot kontaktot (Google Sheet trigger esetén)."""
@@ -341,19 +350,26 @@ def handle_webapp_submission(data):
         # Csak a kitöltött mezőket küldjük
         props = {k: v for k, v in props.items() if v}
         
-        if update_hubspot(contact_id, props):
+        update_result = update_hubspot(contact_id, props)
+        if update_result is True:
             if user_id:
                 telegram_request("sendMessage", {"chat_id": user_id, "text": "✅ Az adatokat sikeresen rögzítettem a HubSpotban!"})
                 
             # Ha van felmérés időpontja, frissítjük a hozzá tartozó Deal állapotát is
-            if felmeres and DEALSTAGE_FELMERES:
+            if props.get("felmeres_idopontja") and DEALSTAGE_FELMERES:
                 deals = get_associated_deals(contact_id)
                 for deal_id in deals:
                     update_deal(deal_id, {"dealstage": DEALSTAGE_FELMERES})
                     
         else:
             if user_id:
-                telegram_request("sendMessage", {"chat_id": user_id, "text": "❌ Hiba történt a HubSpot mentésnél. Ellenőrizd a mezőértékeket!"})
+                import html
+                safe_error = html.escape(str(update_result))
+                telegram_request("sendMessage", {
+                    "chat_id": user_id, 
+                    "text": f"❌ <b>Hiba történt a HubSpot mentésnél!</b>\n\n<b>Részletek:</b>\n<code>{safe_error}</code>", 
+                    "parse_mode": "HTML"
+                })
     except Exception as e:
         print(f"HIBA - Web App submission feldolgozás: {e}")
 
