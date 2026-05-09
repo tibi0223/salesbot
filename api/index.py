@@ -68,13 +68,14 @@ def search_hubspot_contact_by_email(email):
             data = json.loads(r.read().decode('utf-8'))
             results = data.get("results", [])
             if results:
-                return results[0].get("id")
+                return str(results[0].get("id"))
     except Exception as e:
         print(f"HIBA - Kontakt keresés: {e}")
     return None
 
 def create_hubspot_deal(contact_id, deal_name):
     """Létrehoz egy új Deal-t a HubSpotban és összeköti a kontakttal."""
+    if not contact_id: return False
     url = "https://api.hubapi.com/crm/v3/objects/deals"
     payload = {
         "properties": {
@@ -83,7 +84,7 @@ def create_hubspot_deal(contact_id, deal_name):
         },
         "associations": [
             {
-                "to": {"id": contact_id},
+                "to": {"id": str(contact_id)},
                 "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 3}] # Deal to Contact
             }
         ]
@@ -169,6 +170,13 @@ def handle_google_sheet(data):
         email = data.get("Email", "")
         phone = data.get("Telefonszám", "")
         
+        # --- DIAGNOSZTIKA: Azonnal szólunk a Telegramon ---
+        telegram_request("sendMessage", {
+            "chat_id": TELEGRAM_CHAT_ID, 
+            "text": f"🔄 <b>Feldolgozás elindult...</b>\nEmail: {email or 'Nincs'}\nKérlek, várj pár másodpercet!",
+            "parse_mode": "HTML"
+        })
+        
         # 1. Kontakt létrehozása HubSpotban (csak biztonságos alapmezők)
         hs_props = {
             "firstname": data.get("Keresztnév", ""),
@@ -185,9 +193,7 @@ def handle_google_sheet(data):
         # Ha nem sikerült létrehozni (pl. mert már létezik), megpróbáljuk megkeresni email alapján
         if not contact_id and email:
             contact_id = search_hubspot_contact_by_email(email)
-            if contact_id:
-                # Opcionálisan frissíthetjük a meglévő kontakt lead_megjegyzes mezőjét az új adattal
-                update_hubspot(contact_id, {"lead_megjegyzes": hs_props.get("lead_megjegyzes")})
+            # Direkt KIVETTÜK az update_hubspot hívást a gyorsítás és stabilitás miatt!
 
         if contact_id:
             # Létrehozzuk a Dealt (Érdeklődő szakaszba kerül alapból) a régi vagy új kontakthoz
