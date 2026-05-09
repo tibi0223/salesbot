@@ -53,6 +53,26 @@ def create_hubspot_contact(properties):
         print(f"HIBA - HubSpot letrehozás: {e}")
         return None
 
+def search_hubspot_contact_by_email(email):
+    """Megkeresi a kontaktot email alapján, ha már létezik."""
+    if not email:
+        return None
+    url = "https://api.hubapi.com/crm/v3/objects/contacts/search"
+    payload = {
+        "filterGroups": [{"filters": [{"propertyName": "email", "operator": "EQ", "value": email}]}]
+    }
+    req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), method="POST",
+        headers={"Authorization": f"Bearer {HUBSPOT_ACCESS_TOKEN}", "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            data = json.loads(r.read().decode('utf-8'))
+            results = data.get("results", [])
+            if results:
+                return results[0].get("id")
+    except Exception as e:
+        print(f"HIBA - Kontakt keresés: {e}")
+    return None
+
 def create_hubspot_deal(contact_id, deal_name):
     """Létrehoz egy új Deal-t a HubSpotban és összeköti a kontakttal."""
     url = "https://api.hubapi.com/crm/v3/objects/deals"
@@ -162,11 +182,18 @@ def handle_google_sheet(data):
         
         contact_id = create_hubspot_contact(hs_props)
         
+        # Ha nem sikerült létrehozni (pl. mert már létezik), megpróbáljuk megkeresni email alapján
+        if not contact_id and email:
+            contact_id = search_hubspot_contact_by_email(email)
+            if contact_id:
+                # Opcionálisan frissíthetjük a meglévő kontakt lead_megjegyzes mezőjét az új adattal
+                update_hubspot(contact_id, {"lead_megjegyzes": hs_props.get("lead_megjegyzes")})
+
         if contact_id:
-            # Létrehozzuk a Dealt (Érdeklődő szakaszba kerül alapból)
+            # Létrehozzuk a Dealt (Érdeklődő szakaszba kerül alapból) a régi vagy új kontakthoz
             create_hubspot_deal(contact_id, name)
         else:
-            print("Nem sikerült létrehozni a kontaktot a HubSpotban, de a Telegram üzenet kimegy!")
+            print("Nem sikerült létrehozni/megtalálni a kontaktot a HubSpotban, de a Telegram üzenet kimegy!")
 
         # 2. Telegram értesítés
         text = (
