@@ -386,16 +386,25 @@ def handle_webapp_submission(data):
         if contact_props:
             update_hubspot(contact_id, contact_props)
         
-        # --- PROJEKT adatok: Mindig új Deal jön létre ---
+        # --- PROJEKT adatok: Meglévő Deal frissítése, vagy új létrehozása ---
         deal_props = {}
         if data.get("epulet_tipusa"): deal_props["epulet_tipusa"] = data["epulet_tipusa"]
         if data.get("szolgaltatas_tipusa"): deal_props["szolgaltatas_tipusa"] = data["szolgaltatas_tipusa"]
         if data.get("felmeres_idopontja"): deal_props["felmeres_idopontja"] = data["felmeres_idopontja"]
         
-        contact_data = get_hubspot_contact(contact_id) or {}
-        c_name = f"{contact_data.get('firstname','')} {contact_data.get('lastname','')}".strip() or "Névtelen"
-        deal_id = create_hubspot_deal(contact_id, c_name, deal_props)
-        update_result = deal_id is not None
+        deals = get_associated_deals(contact_id)
+        if deals:
+            # Van már Deal → frissítjük a legfrissebbet
+            deal_id = deals[0]
+            if deal_props:
+                update_deal(deal_id, deal_props)
+            update_result = True
+        else:
+            # Nincs Deal → létrehozunk egy újat
+            contact_data = get_hubspot_contact(contact_id) or {}
+            c_name = f"{contact_data.get('firstname','')} {contact_data.get('lastname','')}".strip() or "Névtelen"
+            deal_id = create_hubspot_deal(contact_id, c_name, deal_props)
+            update_result = deal_id is not None
         
         # Megjegyzés Note-ként (Contact-hoz ÉS Deal-hez csatolva, címmel együtt)
         note_parts = []
