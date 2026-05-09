@@ -149,25 +149,24 @@ def handle_google_sheet(data):
         email = data.get("Email", "")
         phone = data.get("Telefonszám", "")
         
-        # 1. Kontakt létrehozása HubSpotban
+        # 1. Kontakt létrehozása HubSpotban (csak biztonságos alapmezők)
         hs_props = {
             "firstname": data.get("Keresztnév", ""),
             "lastname": data.get("Vezetéknév", ""),
             "email": email,
             "phone": phone,
-            "szolgaltatas_tipusa": data.get("Szolgáltatás", ""),
-            "lead_megjegyzes": data.get("Üzenet", "")
+            "lead_megjegyzes": f"Szolgáltatás: {data.get('Szolgáltatás', '')} | Üzenet: {data.get('Üzenet', '')}"
         }
         # Kiszedjük az üres mezőket, hogy a HubSpot ne dobjon hibát
         hs_props = {k: v for k, v in hs_props.items() if v}
         
         contact_id = create_hubspot_contact(hs_props)
-        if not contact_id:
-            print("Nem sikerült létrehozni a kontaktot a HubSpotban.")
-            return
-            
-        # Létrehozzuk a Dealt (Érdeklődő szakaszba kerül alapból)
-        create_hubspot_deal(contact_id, name)
+        
+        if contact_id:
+            # Létrehozzuk a Dealt (Érdeklődő szakaszba kerül alapból)
+            create_hubspot_deal(contact_id, name)
+        else:
+            print("Nem sikerült létrehozni a kontaktot a HubSpotban, de a Telegram üzenet kimegy!")
 
         # 2. Telegram értesítés
         text = (
@@ -180,7 +179,12 @@ def handle_google_sheet(data):
             f'🔗 <a href="https://app.hubspot.com/contacts/contact/{contact_id}">Megnyitás HubSpotban</a>'
         )
         
-        markup = {"inline_keyboard": [[{"text": "✋ Kézbe veszem", "callback_data": f"claim:{contact_id}"}]]}
+        
+        if contact_id:
+            markup = {"inline_keyboard": [[{"text": "✋ Kézbe veszem", "callback_data": f"claim:{contact_id}"}]]}
+        else:
+            markup = {"inline_keyboard": [[{"text": "⚠️ Hiba a HubSpotnál (Nincs ID)", "callback_data": "error"}]]}
+            
         telegram_request("sendMessage", {
             "chat_id": TELEGRAM_CHAT_ID, 
             "text": text, 
