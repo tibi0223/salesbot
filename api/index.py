@@ -334,16 +334,9 @@ def handle_webapp_submission(data):
             "szolgaltatas_tipusa": data.get("szolgaltatas_tipusa"),
             "zip": data.get("post_code"),
             "address": data.get("street_address"),
-            "lead_megjegyzes": data.get("note")
+            "lead_megjegyzes": data.get("note"),
+            "felmeres_idopontja": data.get("felmeres_idopontja")
         }
-        
-        # Időpont formázása HubSpot formátumra (ISO 8601)
-        felmeres = data.get("felmeres_idopontja")
-        if felmeres:
-            if len(felmeres) == 16: # YYYY-MM-DDTHH:MM
-                props["felmeres_idopontja"] = f"{felmeres}:00Z"
-            else:
-                props["felmeres_idopontja"] = felmeres
 
         # Csak a kitöltött mezőket küldjük
         props = {k: v for k, v in props.items() if v}

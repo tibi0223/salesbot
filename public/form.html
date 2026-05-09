@@ -62,6 +62,9 @@
                 return;
             }
 
+            let felmeres_raw = document.getElementById('felmeres_idopontja').value;
+            let felmeres_ms = felmeres_raw ? new Date(felmeres_raw).getTime().toString() : "";
+
             const data = {
                 source: "webapp",
                 contact_id: contactId,
@@ -69,7 +72,7 @@
                 szolgaltatas_tipusa: document.getElementById('szolgaltatas_tipusa').value,
                 post_code: document.getElementById('post_code').value,
                 street_address: document.getElementById('street_address').value,
-                felmeres_idopontja: document.getElementById('felmeres_idopontja').value,
+                felmeres_idopontja: felmeres_ms,
                 note: document.getElementById('note').value,
                 user_id: tg.initDataUnsafe?.user?.id
             };
