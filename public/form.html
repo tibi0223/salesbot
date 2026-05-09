@@ -1,56 +1,319 @@
 <!DOCTYPE html>
-<html>
+<html lang="hu">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Nexus Klíma – Lead rögzítés</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: sans-serif; padding: 20px; background: #f4f4f4; color: #333; }
-        input, select, textarea { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
-        label { font-weight: bold; font-size: 14px; }
-        button { width: 100%; padding: 14px; background: #0088cc; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 16px; cursor: pointer; margin-top: 10px; }
-        button:active { background: #0077b3; }
+        :root {
+            --bg: var(--tg-theme-bg-color, #1a1a2e);
+            --surface: var(--tg-theme-secondary-bg-color, #16213e);
+            --text: var(--tg-theme-text-color, #e8e8e8);
+            --text-muted: var(--tg-theme-hint-color, #8892a4);
+            --accent: var(--tg-theme-button-color, #0f3460);
+            --accent-text: var(--tg-theme-button-text-color, #ffffff);
+            --border: rgba(255,255,255,0.08);
+            --gold: #e6a919;
+            --success: #2ecc71;
+            --radius: 14px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            padding: 0 16px 100px;
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            padding: 24px 0 8px;
+        }
+        .header .logo {
+            font-size: 28px;
+            margin-bottom: 4px;
+        }
+        .header h1 {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text);
+            letter-spacing: -0.3px;
+        }
+        .header p {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        /* Card */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px 16px;
+            margin-top: 16px;
+        }
+        .card-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--gold);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .card-title::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: linear-gradient(90deg, var(--gold), transparent);
+            opacity: 0.3;
+        }
+
+        /* Form fields */
+        .field {
+            margin-bottom: 16px;
+        }
+        .field:last-child {
+            margin-bottom: 0;
+        }
+        .field label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+        .field select,
+        .field input,
+        .field textarea {
+            width: 100%;
+            padding: 12px 14px;
+            background: var(--bg);
+            border: 1.5px solid var(--border);
+            border-radius: 10px;
+            color: var(--text);
+            font-family: inherit;
+            font-size: 15px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            outline: none;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+        .field select {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238892a4' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 14px center;
+            padding-right: 36px;
+        }
+        .field input:focus,
+        .field select:focus,
+        .field textarea:focus {
+            border-color: var(--gold);
+            box-shadow: 0 0 0 3px rgba(230, 169, 25, 0.12);
+        }
+        .field textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+        .field input::placeholder,
+        .field textarea::placeholder {
+            color: var(--text-muted);
+            opacity: 0.5;
+        }
+        /* Date input icon color fix */
+        .field input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+            filter: invert(0.7);
+        }
+
+        /* Submit button */
+        .submit-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            width: 100%;
+            padding: 16px;
+            margin-top: 24px;
+            background: linear-gradient(135deg, var(--gold), #d4940a);
+            color: #1a1a2e;
+            border: none;
+            border-radius: var(--radius);
+            font-family: inherit;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            letter-spacing: 0.3px;
+            transition: transform 0.15s, opacity 0.15s, box-shadow 0.2s;
+            box-shadow: 0 4px 20px rgba(230, 169, 25, 0.25);
+        }
+        .submit-btn:active {
+            transform: scale(0.97);
+        }
+        .submit-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .submit-btn .spinner {
+            display: none;
+            width: 18px;
+            height: 18px;
+            border: 2.5px solid rgba(26,26,46,0.3);
+            border-top-color: #1a1a2e;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+        .submit-btn.loading .spinner { display: block; }
+        .submit-btn.loading .btn-text { display: none; }
+        .submit-btn.loading .btn-loading-text { display: inline; }
+        .btn-loading-text { display: none; }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Success state */
+        .success-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: var(--bg);
+            z-index: 100;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            animation: fadeIn 0.3s ease;
+        }
+        .success-overlay.visible {
+            display: flex;
+        }
+        .success-icon {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            background: rgba(46, 204, 113, 0.12);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 36px;
+            animation: popIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .success-overlay h2 {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--success);
+        }
+        .success-overlay p {
+            font-size: 14px;
+            color: var(--text-muted);
+            text-align: center;
+            max-width: 260px;
+        }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes popIn { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
     </style>
 </head>
 <body>
-    <h3>Lead adatok rögzítése</h3>
-    
-    <label>Épület típusa:</label>
-    <select id="epulet_tipusa">
-        <option value="Panel">Panel</option>
-        <option value="Családi ház">Családi ház</option>
-        <option value="Társasház">Társasház</option>
-        <option value="Iroda">Iroda</option>
-        <option value="Egyéb">Egyéb</option>
-    </select>
+    <div class="header">
+        <div class="logo">❄️</div>
+        <h1>Nexus Klíma</h1>
+        <p>Lead adatok rögzítése</p>
+    </div>
 
-    <label>Szolgáltatás típusa:</label>
-    <select id="szolgaltatas_tipusa">
-        <option value="Telepítés">Telepítés</option>
-        <option value="Éves karbantartás">Éves karbantartás</option>
-        <option value="Mély tisztítás">Mély tisztítás</option>
-        <option value="Hibaelhárítás">Hibaelhárítás</option>
-        <option value="Egyéb">Egyéb</option>
-    </select>
+    <div class="card">
+        <div class="card-title">🏢 Projekt részletek</div>
+        <div class="field">
+            <label>Épület típusa</label>
+            <select id="epulet_tipusa">
+                <option value="">Válassz...</option>
+                <option value="Panel">Panel</option>
+                <option value="Családi ház">Családi ház</option>
+                <option value="Társasház">Társasház</option>
+                <option value="Iroda">Iroda</option>
+                <option value="Egyéb">Egyéb</option>
+            </select>
+        </div>
+        <div class="field">
+            <label>Szolgáltatás típusa</label>
+            <select id="szolgaltatas_tipusa">
+                <option value="">Válassz...</option>
+                <option value="Telepítés">Telepítés</option>
+                <option value="Éves karbantartás">Éves karbantartás</option>
+                <option value="Mély tisztítás">Mély tisztítás</option>
+                <option value="Hibaelhárítás">Hibaelhárítás</option>
+                <option value="Egyéb">Egyéb</option>
+            </select>
+        </div>
+    </div>
 
-    <label>Irányítószám (post_code):</label>
-    <input type="text" id="post_code" placeholder="1234">
+    <div class="card">
+        <div class="card-title">📍 Helyszín</div>
+        <div class="field">
+            <label>Irányítószám</label>
+            <input type="text" id="post_code" placeholder="pl. 1134" inputmode="numeric" maxlength="4">
+        </div>
+        <div class="field">
+            <label>Utca, házszám</label>
+            <input type="text" id="street_address" placeholder="pl. Váci út 45.">
+        </div>
+    </div>
 
-    <label>Utca, házszám (street_address):</label>
-    <input type="text" id="street_address" placeholder="Utca, házszám">
-    
-    <label>Felmérés időpontja:</label>
-    <input type="datetime-local" id="felmeres_idopontja">
-    
-    <label>Megjegyzés:</label>
-    <textarea id="note" rows="4" placeholder="Lead specifikus információk..."></textarea>
-    
-    <button id="saveBtn" onclick="sendData()">Mentés a HubSpotba</button>
+    <div class="card">
+        <div class="card-title">📅 Időpont</div>
+        <div class="field">
+            <label>Felmérés időpontja</label>
+            <input type="datetime-local" id="felmeres_idopontja">
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-title">💬 Megjegyzés</div>
+        <div class="field">
+            <textarea id="note" rows="3" placeholder="Bármilyen fontos információ az ügyfélről..."></textarea>
+        </div>
+    </div>
+
+    <button class="submit-btn" id="saveBtn" onclick="sendData()">
+        <span class="spinner"></span>
+        <span class="btn-text">💾 Mentés a HubSpotba</span>
+        <span class="btn-loading-text">Mentés folyamatban...</span>
+    </button>
+
+    <div class="success-overlay" id="successOverlay">
+        <div class="success-icon">✅</div>
+        <h2>Sikeresen mentve!</h2>
+        <p>Az adatok rögzítve lettek a HubSpotban. Az ablak hamarosan bezárul.</p>
+    </div>
 
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
         tg.ready();
+
+        // Telegram theme-hez igazítás
+        if (tg.themeParams) {
+            const r = document.documentElement.style;
+            if (tg.themeParams.bg_color) r.setProperty('--bg', tg.themeParams.bg_color);
+            if (tg.themeParams.secondary_bg_color) r.setProperty('--surface', tg.themeParams.secondary_bg_color);
+            if (tg.themeParams.text_color) r.setProperty('--text', tg.themeParams.text_color);
+            if (tg.themeParams.hint_color) r.setProperty('--text-muted', tg.themeParams.hint_color);
+            if (tg.themeParams.button_color) r.setProperty('--accent', tg.themeParams.button_color);
+        }
 
         async function sendData() {
             const urlParams = new URLSearchParams(window.location.search);
@@ -58,7 +321,7 @@
             const saveBtn = document.getElementById('saveBtn');
 
             if (!contactId) {
-                alert("Hiba: Nincs Contact ID!");
+                tg.showAlert("Hiba: Nincs Contact ID!");
                 return;
             }
 
@@ -78,10 +341,9 @@
             };
 
             saveBtn.disabled = true;
-            saveBtn.innerText = "Küldés folyamatban...";
+            saveBtn.classList.add('loading');
 
             try {
-                // Elküldjük az adatokat közvetlenül a backendnek
                 const response = await fetch('/api/index', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -89,16 +351,17 @@
                 });
 
                 if (response.ok) {
-                    tg.close();
+                    document.getElementById('successOverlay').classList.add('visible');
+                    setTimeout(() => tg.close(), 1800);
                 } else {
-                    alert("Hiba történt a mentés során.");
+                    tg.showAlert("Hiba történt a mentés során. Próbáld újra!");
                     saveBtn.disabled = false;
-                    saveBtn.innerText = "Mentés a HubSpotba";
+                    saveBtn.classList.remove('loading');
                 }
             } catch (error) {
-                alert("Hálózati hiba történt.");
+                tg.showAlert("Hálózati hiba történt.");
                 saveBtn.disabled = false;
-                saveBtn.innerText = "Mentés a HubSpotba";
+                saveBtn.classList.remove('loading');
             }
         }
     </script>

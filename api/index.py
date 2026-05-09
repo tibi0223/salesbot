@@ -158,22 +158,13 @@ def create_hubspot_note(contact_id, text, deal_id=None):
     if deal_id:
         associations.append({"to": {"id": str(deal_id)}, "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 214}]})
     payload = {"properties": {"hs_note_body": text, "hs_timestamp": str(int(__import__('time').time() * 1000))}, "associations": associations}
-    print(f"NOTE DEBUG - payload: {json.dumps(payload)}")
     req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), method="POST",
         headers={"Authorization": f"Bearer {HUBSPOT_ACCESS_TOKEN}", "Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=10) as r:
-            print(f"NOTE DEBUG - siker")
             return True
     except Exception as e:
-        if isinstance(e, urllib.error.HTTPError):
-            try:
-                error_body = e.read().decode('utf-8')
-            except:
-                error_body = str(e)
-            print(f"HIBA - Note letrehozas: {error_body}")
-        else:
-            print(f"HIBA - Note letrehozas: {e}")
+        print(f"HIBA - Note letrehozas: {e}")
         return False
 
 def handle_hubspot(body_str):
@@ -213,13 +204,6 @@ def handle_google_sheet(data):
         name = data.get("Teljes név", "") or f'{data.get("Vezetéknév", "")} {data.get("Keresztnév", "")}'.strip() or "Névtelen Lead"
         email = data.get("Email", "")
         phone = data.get("Telefonszám", "")
-        
-        # --- DIAGNOSZTIKA: Azonnal szólunk a Telegramon ---
-        telegram_request("sendMessage", {
-            "chat_id": TELEGRAM_CHAT_ID, 
-            "text": f"🔄 <b>Feldolgozás elindult...</b>\nEmail: {email or 'Nincs'}\nKérlek, várj pár másodpercet!",
-            "parse_mode": "HTML"
-        })
         
         # 1. Kontakt létrehozása HubSpotban (csak személyes alapmezők)
         hs_props = {
